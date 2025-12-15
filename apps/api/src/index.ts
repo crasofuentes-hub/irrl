@@ -1,16 +1,16 @@
 import express, { Request, Response, NextFunction } from "express";
 import cors from "cors";
 import helmet from "helmet";
-import { env, validateEnv } from "./env";
-import { healthCheck, closePool } from "./db/pool";
-import { registerBuiltInResolvers } from "./resolvers";
-import { auditLog } from "./audit/auditLog";
-import { realmsRouter } from "./routes/realms.routes";
-import { attestationsRouter } from "./routes/attestations.routes";
-import { verifyRouter } from "./routes/verify.routes";
-import { trustRouter } from "./routes/trust.routes";
-import { proofsRouter } from "./routes/proofs.routes";
-import { resolversRouter } from "./routes/resolvers.routes";
+import { env, validateEnv } from "./env.js";
+import { healthCheck, closePool, query } from "./db/pool.js";
+import { registerBuiltInResolvers } from "./resolvers/index.js";
+import { auditLog } from "./audit/auditLog.js";
+import { realmsRouter } from "./routes/realms.routes.js";
+import { attestationsRouter } from "./routes/attestations.routes.js";
+import { verifyRouter } from "./routes/verify.routes.js";
+import { trustRouter } from "./routes/trust.routes.js";
+import { proofsRouter } from "./routes/proofs.routes.js";
+import { resolversRouter } from "./routes/resolvers.routes.js";
 
 const app = express();
 validateEnv();
@@ -19,18 +19,13 @@ app.use(helmet());
 app.use(cors({ origin: env.CORS_ORIGINS === "*" ? true : env.CORS_ORIGINS.split(",") }));
 app.use(express.json({ limit: "10mb" }));
 
-app.use((req: Request, _res: Response, next: NextFunction) => {
-  console.log(`${new Date().toISOString()} ${req.method} ${req.path}`);
-  next();
-});
-
 app.get("/", (_req: Request, res: Response) => {
-  res.json({ name: "IRRL - Interoperable Reputation & Resolution Layer", version: "2.0.0", health: "/health" });
+  res.json({ name: "IRRL - Interoperable Reputation & Resolution Layer", version: "2.0.0", docs: "/info" });
 });
 
 app.get("/health", async (_req: Request, res: Response) => {
   const dbOk = await healthCheck();
-  res.status(dbOk ? 200 : 503).json({ status: dbOk ? "healthy" : "unhealthy", timestamp: new Date().toISOString(), services: { database: dbOk ? "connected" : "disconnected" } });
+  res.status(dbOk ? 200 : 503).json({ status: dbOk ? "healthy" : "unhealthy", timestamp: new Date().toISOString() });
 });
 
 app.get("/info", (_req: Request, res: Response) => {
@@ -51,11 +46,10 @@ app.use((_req: Request, res: Response) => {
 
 app.use((err: Error, _req: Request, res: Response, _next: NextFunction) => {
   console.error("Error:", err);
-  res.status(500).json({ success: false, error: { code: "INTERNAL_ERROR", message: env.NODE_ENV === "production" ? "Internal error" : err.message } });
+  res.status(500).json({ success: false, error: { code: "INTERNAL_ERROR", message: "Internal error" } });
 });
 
 async function runMigrations(): Promise<void> {
-  const { query } = await import("./db/pool");
   const result = await query("SELECT to_regclass('public.realms')");
   if (result[0]?.to_regclass) { console.log("Tables exist"); return; }
   console.log("Creating tables...");
@@ -76,20 +70,12 @@ async function start(): Promise<void> {
     await runMigrations();
     await auditLog.initialize();
     registerBuiltInResolvers();
-    app.listen(env.PORT, env.HOST, () => {
-      console.log(`IRRL running on http://${env.HOST}:${env.PORT}`);
-    });
+    app.listen(env.PORT, env.HOST, () => { console.log(`IRRL running on http://${env.HOST}:${env.PORT}`); });
   } catch (e) { console.error("Failed to start:", e); process.exit(1); }
 }
 
-async function shutdown(): Promise<void> {
-  console.log("\nShutting down...");
-  await closePool();
-  process.exit(0);
-}
-
-process.on("SIGINT", shutdown);
-process.on("SIGTERM", shutdown);
+process.on("SIGINT", async () => { await closePool(); process.exit(0); });
+process.on("SIGTERM", async () => { await closePool(); process.exit(0); });
 start();
 
 export { app };
