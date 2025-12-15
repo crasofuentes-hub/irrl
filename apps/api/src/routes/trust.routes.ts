@@ -104,7 +104,7 @@ trustRouter.get("/reputation/:subject", async (req: Request, res: Response) => {
 
     const graph = new TrustGraph();
     graph.loadFromEvaluations(evals);
-    const sybil = computeSybilResistance(evals, atts, graph);
+    const sybil = computeSybilResistance(evals, atts.map(a => ({ verificationCount: a.verification_count })), graph);
 
     const cacheId = contentId({ subject, realm, domain, ts: Date.now() });
     const validUntil = new Date(Date.now() + 5 * 60 * 1000);

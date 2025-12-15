@@ -1,4 +1,4 @@
-import { Pool, PoolClient, QueryResult } from "pg";
+import { Pool, PoolClient } from "pg";
 import { env } from "../env";
 
 const pool = new Pool({
@@ -12,8 +12,8 @@ export async function query<T = Record<string, unknown>>(
   text: string,
   params?: unknown[]
 ): Promise<T[]> {
-  const result: QueryResult<T> = await pool.query(text, params);
-  return result.rows;
+  const result = await pool.query(text, params);
+  return result.rows as T[];
 }
 
 export async function queryOne<T = Record<string, unknown>>(
